@@ -17,6 +17,14 @@ const ctx = await esbuild.context({
   define: {
     'process.env.NODE_ENV': '"development"',
   },
+  loader: {
+    // Inline KaTeX fonts as data URLs so no external requests needed
+    '.woff':  'dataurl',
+    '.woff2': 'dataurl',
+    '.ttf':   'dataurl',
+    '.eot':   'dataurl',
+    '.svg':   'dataurl',
+  },
 });
 
 if (watch) {

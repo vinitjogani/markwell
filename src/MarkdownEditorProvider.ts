@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
+import * as path from 'path';
 
 function getNonce() {
   let text = '';
@@ -18,11 +20,29 @@ function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
   }) as T;
 }
 
+function sleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
+
+// Cursor command IDs to try in order. These vary by Cursor version.
+// The extension tries each silently until one succeeds.
+const CURSOR_INLINE_CMDS = [
+  'cursor.generateCode',          // Cursor ≤0.42
+  'aichat.inlineedit',            // Cursor 0.43+
+  'cursor.requestInlineEdit',
+  'cursorai.action.generateCodeInline',
+];
+const CURSOR_CHAT_CMDS = [
+  'aichat.newchataction',         // Cursor chat sidebar
+  'cursor.openChat',
+  'workbench.panel.aichat.view.focus',
+  'cursorChat.openChat',
+];
+
 type WebviewMessage =
   | { type: 'ready' }
   | { type: 'edit'; markdown: string }
   | { type: 'selectionChange'; anchorPos: number; headPos: number; selectedText: string }
-  | { type: 'revealInSource'; anchorPos: number; headPos: number; triggerInlineEdit?: boolean; triggerChat?: boolean };
+  | { type: 'revealInSource'; anchorPos: number; headPos: number; triggerInlineEdit?: boolean; triggerChat?: boolean }
+  | { type: 'print'; proseHtml: string };
 
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly selfEdits = new WeakMap<vscode.TextDocument, string>();
@@ -60,7 +80,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         case 'selectionChange':
           break;
         case 'revealInSource':
-          await this.revealInSource(document, msg.anchorPos, msg.headPos, msg.triggerInlineEdit, msg.triggerChat);
+          await this.revealInSource(
+            document, msg.anchorPos, msg.headPos,
+            msg.triggerInlineEdit, msg.triggerChat
+          );
+          break;
+        case 'print':
+          await this.printDocument(msg.proseHtml);
           break;
       }
     });
@@ -69,17 +95,23 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
       if (e.document.uri.toString() !== document.uri.toString()) return;
       if (e.contentChanges.length === 0) return;
       const pending = this.selfEdits.get(document);
-      if (pending !== undefined && pending === document.getText()) {
+      if (pending !== undefined) {
+        // Normalize trailing whitespace before comparing — tiptap-markdown can
+        // add/remove a trailing newline relative to what VS Code stores, which
+        // would otherwise break the loop-prevention check and cause a spurious
+        // setContent() call in the webview (the "heading deletion" glitch).
+        if (pending.trimEnd() === document.getText().trimEnd()) {
+          this.selfEdits.delete(document);
+          return;
+        }
+        // Content differed — clear the stale entry so the next external change
+        // isn't accidentally swallowed
         this.selfEdits.delete(document);
-        return;
       }
       webviewPanel.webview.postMessage({ type: 'update', markdown: document.getText() });
     });
 
-    webviewPanel.onDidDispose(() => {
-      msgSub.dispose();
-      changeSub.dispose();
-    });
+    webviewPanel.onDidDispose(() => { msgSub.dispose(); changeSub.dispose(); });
   }
 
   private async revealInSource(
@@ -89,26 +121,97 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     triggerInlineEdit?: boolean,
     triggerChat?: boolean
   ): Promise<void> {
-    const anchor = document.positionAt(anchorOffset);
-    const head = document.positionAt(headOffset);
+    const anchor = document.positionAt(Math.max(0, anchorOffset));
+    const head   = document.positionAt(Math.max(0, headOffset));
+
+    // Open / focus the source file with the selection
     await vscode.window.showTextDocument(document.uri, {
       viewColumn: vscode.ViewColumn.Beside,
       selection: new vscode.Selection(anchor, head),
       preserveFocus: false,
     });
 
-    // Give the editor a moment to focus, then trigger Cursor's AI command
-    if (triggerInlineEdit || triggerChat) {
-      await new Promise((r) => setTimeout(r, 120));
-      const cmd = triggerChat
-        ? 'aichat.newchataction'
-        : 'cursor.generateCode'; // Cursor's Cmd+K equivalent
+    if (!triggerInlineEdit && !triggerChat) return;
+
+    // Give Cursor time to register focus and the selection
+    await sleep(80);
+    await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+    await sleep(180);
+
+    const cmds = triggerInlineEdit ? CURSOR_INLINE_CMDS : CURSOR_CHAT_CMDS;
+    let fired = false;
+
+    for (const cmd of cmds) {
       try {
         await vscode.commands.executeCommand(cmd);
+        fired = true;
+        break;
       } catch {
-        // Cursor commands not available (e.g. running in plain VS Code) — ignore silently
+        // command not registered — try next
       }
     }
+
+    if (!fired) {
+      // Graceful fallback: user's selection is open, just tell them what to press
+      const label = triggerInlineEdit ? '⌘K' : '⌘L';
+      vscode.window.showInformationMessage(
+        `Selection opened in source. Press ${label} to edit with Cursor AI.`
+      );
+    }
+  }
+
+  private async printDocument(proseHtml: string): Promise<void> {
+    const cssUri = vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'bundle.css');
+    const cssBytes = await vscode.workspace.fs.readFile(cssUri);
+    const css = Buffer.from(cssBytes).toString('utf8');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Print</title>
+  <!-- Load the same fonts used in the editor -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rethink+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+${css}
+/* Standalone print page overrides */
+html, body {
+  background: #fff !important;
+  color: #191919 !important;
+  font-family: 'Rethink Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+#page {
+  padding: 0 !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+#topbar, #block-actions, #format-toolbar, #slash-menu,
+#img-toolbar, #link-popover, #color-pop, #emoji-picker-wrap,
+#toc-panel { display: none !important; }
+/* No URL annotations after links */
+a::after { content: none !important; }
+  </style>
+</head>
+<body>
+  <div id="page">
+    <div id="editor"><div class="ProseMirror mmw-prose">${proseHtml}</div></div>
+  </div>
+  <script>
+    // Wait for fonts to load before printing
+    document.fonts.ready.then(function() {
+      setTimeout(function() { window.print(); }, 300);
+    });
+  </script>
+</body>
+</html>`;
+
+    const tmpFile = path.join(os.tmpdir(), 'markmywords-print.html');
+    const tmpUri = vscode.Uri.file(tmpFile);
+    await vscode.workspace.fs.writeFile(tmpUri, Buffer.from(html, 'utf8'));
+    await vscode.env.openExternal(tmpUri);
   }
 
   private buildHtml(webview: vscode.Webview): string {
@@ -128,8 +231,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'none';
              style-src ${webview.cspSource} 'unsafe-inline' https://fonts.googleapis.com;
-             font-src https://fonts.gstatic.com;
-             img-src ${webview.cspSource} https: data:;
+             font-src https://fonts.gstatic.com data:;
+             img-src ${webview.cspSource} https: data: blob:;
+             frame-src https://www.youtube-nocookie.com https://www.youtube.com;
              script-src 'nonce-${nonce}';">
   <title>Mark My Words</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -138,60 +242,71 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   <link rel="stylesheet" href="${styleUri}">
 </head>
 <body>
-  <!-- Ghost header — fades in on hover -->
+  <!-- Ghost header -->
   <header id="topbar">
     <span id="doc-title"></span>
     <div id="topbar-actions">
-      <button id="btn-reveal" title="View/edit source (⌘⇧↵)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      <span id="word-count"></span>
+      <button id="btn-toc" title="Table of contents">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+        Contents
+      </button>
+      <button id="btn-reveal" title="Open source with selection (⌘⇧↵)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Source
       </button>
-      <button id="btn-print" title="Print">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      <button id="btn-print" title="Print document">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Print
       </button>
     </div>
   </header>
 
-  <!-- Page scroll container -->
   <div id="page">
-    <!-- Block action handles — repositioned via JS on block hover -->
+    <!-- Block action handles (repositioned via JS) -->
     <div id="block-actions">
-      <button id="block-plus" title="Add block">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <button id="block-plus" title="Add block below">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button id="block-drag" title="Drag to reorder" draggable="true">
-        <svg width="14" height="14" viewBox="0 0 10 16" fill="currentColor">
-          <circle cx="2.5" cy="2" r="1.5"/><circle cx="7.5" cy="2" r="1.5"/>
-          <circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/>
-          <circle cx="2.5" cy="14" r="1.5"/><circle cx="7.5" cy="14" r="1.5"/>
+      <button id="block-drag" title="Drag to reorder">
+        <svg width="10" height="15" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2.5" cy="2" r="1.4"/><circle cx="7.5" cy="2" r="1.4"/>
+          <circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/>
+          <circle cx="2.5" cy="14" r="1.4"/><circle cx="7.5" cy="14" r="1.4"/>
         </svg>
       </button>
     </div>
 
-    <!-- The Tiptap editor mounts here -->
     <div id="editor"></div>
   </div>
 
-  <!-- Floating format toolbar — appears above text selection -->
-  <div id="format-toolbar" role="toolbar" aria-label="Format">
-    <button data-fmt="bold" title="Bold (⌘B)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg></button>
-    <button data-fmt="italic" title="Italic (⌘I)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
-    <button data-fmt="strike" title="Strikethrough"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.3 12H6.7"/><path d="M12 3c-1.2 0-2.4.6-3 1.7-.6 1.1-.5 2.4.2 3.3"/><path d="M12 21c1.2 0 2.4-.6 3-1.7.6-1.1.5-2.4-.2-3.3"/></svg></button>
-    <button data-fmt="code" title="Inline code"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
+  <!-- Floating format + AI toolbar (appears on text selection) -->
+  <div id="format-toolbar" role="toolbar">
+    <button data-fmt="bold"      title="Bold (⌘B)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg></button>
+    <button data-fmt="italic"    title="Italic (⌘I)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
+    <button data-fmt="underline" title="Underline (⌘U)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg></button>
+    <button data-fmt="strike"    title="Strikethrough"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><path d="M16 6C16 6 14.5 4 12 4C9.5 4 8 5.5 8 7.5C8 9.5 9.5 10.5 12 11"/><path d="M8 18C8 18 9.5 20 12 20C14.5 20 16 18.5 16 16.5"/></svg></button>
+    <button data-fmt="code"      title="Inline code"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
     <div class="ft-sep"></div>
-    <button data-fmt="ai-edit" title="Edit with Cursor AI (⌘K)" class="ft-ai">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      ⌘K
+    <button data-fmt="sup"  title="Superscript"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19l8-8"/><path d="M12 19l-8-8"/><path d="M20 12h-4c0-1.5.44-2 1.5-2.5S20 8.33 20 7a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/></svg></button>
+    <button data-fmt="sub"  title="Subscript"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l8 8"/><path d="M12 5l-8 8"/><path d="M20 21h-4c0-1.5.44-2 1.5-2.5S20 17.33 20 16a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/></svg></button>
+    <div class="ft-sep"></div>
+    <button data-fmt="link"      title="Link"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+    <button data-fmt="highlight" title="Highlight colour"><span class="ft-hl-dot" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:transparent;border:1.5px dashed currentColor;"></span></button>
+    <button data-fmt="color"     title="Text colour"><span class="ft-color-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--ft-text);"></span></button>
+    <div class="ft-sep"></div>
+    <button data-fmt="ai-edit" class="ft-ai" title="Edit with Cursor AI — ⌘⇧K">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+      ⌘⇧K
     </button>
-    <button data-fmt="ai-chat" title="Chat with Cursor AI (⌘L)" class="ft-ai">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      ⌘L
+    <button data-fmt="ai-chat" class="ft-ai" title="Chat with Cursor AI — ⌘⇧L">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      ⌘⇧L
     </button>
   </div>
 
-  <!-- Slash command menu -->
-  <div id="slash-menu" role="listbox" aria-label="Block commands"></div>
+  <!-- Slash command popup -->
+  <div id="slash-menu" role="listbox" aria-label="Insert block"></div>
 
   <script nonce="${nonce}" src="${bundleUri}"></script>
 </body>

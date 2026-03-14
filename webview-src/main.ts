@@ -2,6 +2,8 @@ import { createEditor } from './editor';
 import { buildPmToMarkdownMap, pmPosToMdOffset } from './selection-sync';
 import { initDragHandles } from './drag-handle';
 import { initFormatToolbar } from './format-toolbar';
+import { addImagePasteHandler, initImageToolbar } from './image-extension';
+import { initToc } from './toc';
 import './styles.css';
 
 declare function acquireVsCodeApi(): {
@@ -23,8 +25,7 @@ const editor = createEditor(
   editorEl,
   () => {
     if (isUpdatingFromExtension) return;
-    const markdown = getMarkdown();
-    post({ type: 'edit', markdown });
+    post({ type: 'edit', markdown: getMarkdown() });
   },
   () => {
     const { from, to, empty } = editor.state.selection;
@@ -46,10 +47,7 @@ function getMarkdown(): string {
 function getSelectionOffsets() {
   const { from, to } = editor.state.selection;
   const ranges = buildPmToMarkdownMap(editor);
-  return {
-    anchorPos: pmPosToMdOffset(ranges, from),
-    headPos: pmPosToMdOffset(ranges, to),
-  };
+  return { anchorPos: pmPosToMdOffset(ranges, from), headPos: pmPosToMdOffset(ranges, to) };
 }
 
 // ---- Extension → Webview ----
@@ -63,9 +61,7 @@ window.addEventListener('message', (event: MessageEvent) => {
       editor.commands.setContent(msg.markdown, false);
       isUpdatingFromExtension = false;
       updateDocTitle();
-      break;
-    case 'triggerPrint':
-      window.print();
+      updateWordCount();
       break;
   }
 });
@@ -73,68 +69,70 @@ window.addEventListener('message', (event: MessageEvent) => {
 // ---- Keyboard shortcuts ----
 document.addEventListener('keydown', (e: KeyboardEvent) => {
   const cmd = e.metaKey || e.ctrlKey;
+  if (!cmd) return;
 
-  // ⌘K — Cursor inline edit
-  if (cmd && e.key === 'k' && !e.shiftKey) {
-    const { empty } = editor.state.selection;
-    if (!empty) {
+  // ⌘⇧K → reveal + trigger Cursor inline edit
+  if (e.shiftKey && (e.key === 'K' || e.key === 'k')) {
+    if (!editor.state.selection.empty) {
       e.preventDefault();
+      e.stopPropagation();
       post({ type: 'revealInSource', ...getSelectionOffsets(), triggerInlineEdit: true });
     }
     return;
   }
 
-  // ⌘L — Cursor chat
-  if (cmd && e.key === 'l') {
-    const { empty } = editor.state.selection;
-    if (!empty) {
+  // ⌘⇧L → reveal + trigger Cursor chat
+  if (e.shiftKey && (e.key === 'L' || e.key === 'l')) {
+    if (!editor.state.selection.empty) {
       e.preventDefault();
+      e.stopPropagation();
       post({ type: 'revealInSource', ...getSelectionOffsets(), triggerChat: true });
     }
     return;
   }
 
-  // ⌘⇧↵ — Reveal in source (no AI trigger, just view the markdown)
-  if (cmd && e.shiftKey && e.key === 'Enter') {
+  // ⌘⇧↵ → reveal source (no AI)
+  if (e.shiftKey && e.key === 'Enter') {
     e.preventDefault();
     const { empty } = editor.state.selection;
-    if (!empty) {
-      post({ type: 'revealInSource', ...getSelectionOffsets() });
-    } else {
-      // No selection — reveal whole file
-      post({ type: 'revealInSource', anchorPos: 0, headPos: 0 });
-    }
-    return;
+    post({ type: 'revealInSource', ...(empty ? { anchorPos: 0, headPos: 0 } : getSelectionOffsets()) });
   }
 });
 
 // ---- Toolbar buttons ----
 document.getElementById('btn-reveal')!.addEventListener('click', () => {
   const { empty } = editor.state.selection;
-  post({
-    type: 'revealInSource',
-    ...(empty ? { anchorPos: 0, headPos: 0 } : getSelectionOffsets()),
-  });
+  post({ type: 'revealInSource', ...(empty ? { anchorPos: 0, headPos: 0 } : getSelectionOffsets()) });
 });
 
-document.getElementById('btn-print')!.addEventListener('click', () => window.print());
+document.getElementById('btn-print')!.addEventListener('click', () => {
+  const proseHtml = (editor.view.dom as HTMLElement).innerHTML;
+  post({ type: 'print', proseHtml });
+});
 
-// ---- Doc title from H1 ----
+// ---- Live doc title (from first H1) ----
 function updateDocTitle() {
-  const titleEl = document.getElementById('doc-title')!;
-  const firstHeading = editor.state.doc.firstChild;
-  if (firstHeading?.type.name === 'heading') {
-    titleEl.textContent = firstHeading.textContent;
-  } else {
-    titleEl.textContent = '';
-  }
+  const el = document.getElementById('doc-title')!;
+  const first = editor.state.doc.firstChild;
+  el.textContent = first?.type.name === 'heading' ? first.textContent : '';
 }
-
 editor.on('update', updateDocTitle);
+
+// ---- Word count ----
+function updateWordCount() {
+  const text = editor.state.doc.textContent;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const el = document.getElementById('word-count');
+  if (el) el.textContent = words === 1 ? '1 word' : `${words.toLocaleString()} words`;
+}
+editor.on('update', updateWordCount);
 
 // ---- Init sub-systems ----
 initDragHandles(editor);
 initFormatToolbar(editor, post);
+addImagePasteHandler(editor);
+initImageToolbar(editor);
+initToc(editor);
 
 // ---- Signal ready ----
 post({ type: 'ready' });

@@ -322,6 +322,20 @@ body:hover #topbar,
   /* Don't use outline/border — just rely on drag handle */
 }
 
+/* ---- Drag & drop ---- */
+
+/* Block being dragged (source fades out) */
+.mmw-prose > *.mmw-dragging {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+/* ProseMirror drop cursor (from @tiptap/extension-dropcursor in StarterKit) */
+.ProseMirror-dropcursor {
+  border-top: 2px solid #2563eb !important;
+  margin: 0;
+}
+
 /* ---- Tables (Notion-accurate) ---- */
 .mmw-prose .tableWrapper {
   overflow-x: auto;
@@ -488,6 +502,484 @@ body:hover #topbar,
 }
 
 /* ============================================================
+   IMAGES
+   ============================================================ */
+.mmw-img-figure {
+  display: block;
+  margin: 20px 0;
+  text-align: center;
+}
+img.mmw-image {
+  display: block;
+  border-radius: 5px;
+  max-width: 100%;
+  height: auto;
+}
+/* When figure is selected */
+.ProseMirror-selectednode .mmw-img-figure,
+figure.ProseMirror-selectednode {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Image width toolbar */
+#img-toolbar {
+  position: fixed;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  background: var(--ft-bg, #1f1f1f);
+  border-radius: 8px;
+  padding: 4px 6px;
+  z-index: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.06);
+}
+#img-toolbar button {
+  background: none;
+  border: none;
+  color: var(--ft-text, #e8e8e8);
+  font-family: var(--font);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.1s;
+}
+#img-toolbar button:hover { background: rgba(255,255,255,0.10); }
+#img-toolbar button.active { background: rgba(255,255,255,0.16); color: #fff; }
+.img-tb-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(255,255,255,0.14);
+  margin: 0 3px;
+}
+
+/* ============================================================
+   PAGE BREAK
+   ============================================================ */
+.mmw-page-break {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0;
+  color: var(--text-3);
+  user-select: none;
+}
+.mmw-page-break::before,
+.mmw-page-break::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--border) 0,
+    var(--border) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+.mmw-page-break span {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.ProseMirror-selectednode.mmw-page-break {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* ============================================================
+   UNDERLINE / SUP / SUB (prose)
+   ============================================================ */
+.mmw-prose u { text-decoration: underline; text-underline-offset: 2px; }
+.mmw-prose sup { font-size: 0.72em; vertical-align: super; line-height: 0; }
+.mmw-prose sub { font-size: 0.72em; vertical-align: sub;   line-height: 0; }
+
+/* ============================================================
+   HIGHLIGHT & COLOUR
+   ============================================================ */
+/* Handled by tiptap-generated inline styles */
+
+/* Colour swatch palette popup */
+#color-pop {
+  position: fixed;
+  display: none;
+  grid-template-columns: repeat(4, 20px);
+  gap: 4px;
+  padding: 8px;
+  background: var(--ft-bg, #1f1f1f);
+  border-radius: 10px;
+  z-index: 600;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.06);
+}
+#color-pop button {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+#color-pop button:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+}
+
+/* ============================================================
+   YOUTUBE EMBED
+   ============================================================ */
+.mmw-prose div[data-youtube-video] {
+  display: block;
+  margin: 24px auto;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 720px;
+}
+.mmw-prose div[data-youtube-video] iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+}
+.mmw-prose div[data-youtube-video].ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ============================================================
+   EMOJI PICKER
+   ============================================================ */
+#emoji-picker-wrap {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 600;
+  display: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+  overflow: hidden;
+  width: 320px;
+}
+.ep-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  gap: 2px;
+}
+.ep-tab {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: background 0.1s, opacity 0.1s;
+}
+.ep-tab:hover, .ep-tab.active {
+  background: var(--border);
+  opacity: 1;
+}
+.ep-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ep-emoji {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 20px;
+  padding: 4px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.1s;
+  line-height: 1;
+}
+.ep-emoji:hover { background: var(--border); }
+
+/* ============================================================
+   LINKS
+   ============================================================ */
+.mmw-prose a.mmw-link {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-color: rgba(37,99,235,0.35);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.1s, text-decoration-color 0.1s;
+}
+.mmw-prose a.mmw-link:hover {
+  color: #1d4ed8;
+  text-decoration-color: rgba(29,78,216,0.7);
+}
+body.vscode-dark .mmw-prose a.mmw-link {
+  color: #60a5fa;
+  text-decoration-color: rgba(96,165,250,0.35);
+}
+
+/* Link popover */
+#link-popover {
+  position: fixed;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: var(--ft-bg, #1f1f1f);
+  border-radius: 8px;
+  padding: 5px 8px;
+  z-index: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.06);
+  max-width: 320px;
+}
+#link-popover #lp-href {
+  color: #93c5fd;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  max-width: 200px;
+}
+#link-popover #lp-href:hover { text-decoration: underline; }
+.lp-sep {
+  width: 1px; height: 14px;
+  background: rgba(255,255,255,0.14);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+#link-popover button {
+  background: none; border: none;
+  color: rgba(255,255,255,0.7);
+  font-family: var(--font); font-size: 11.5px;
+  padding: 2px 6px; border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#link-popover button:hover { background: rgba(255,255,255,0.10); color: #fff; }
+
+/* Format toolbar link input */
+.ft-link-input-wrap {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: rgba(255,255,255,0.5);
+}
+#ft-link-input {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 5px;
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 3px 8px;
+  outline: none;
+  width: 220px;
+}
+#ft-link-input:focus { border-color: rgba(255,255,255,0.35); }
+#ft-link-input::placeholder { color: rgba(255,255,255,0.3); }
+
+/* ============================================================
+   TASK LISTS
+   ============================================================ */
+.mmw-prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 4px;
+}
+.mmw-prose ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.mmw-prose ul[data-type="taskList"] li > label {
+  margin-top: 3px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.mmw-prose ul[data-type="taskList"] li > label input[type="checkbox"] {
+  appearance: none;
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, border-color 0.1s;
+}
+.mmw-prose ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+.mmw-prose ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {
+  content: '';
+  display: block;
+  width: 8px; height: 5px;
+  border-left: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  transform: rotate(-45deg) translateY(-1px);
+  margin: 3px auto 0;
+}
+.mmw-prose ul[data-type="taskList"] li[data-checked="true"] > div {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.mmw-prose ul[data-type="taskList"] li > div { flex: 1; }
+
+/* ============================================================
+   MATH / KATEX
+   ============================================================ */
+.mmw-math-inline {
+  display: inline;
+  cursor: default;
+  border-radius: 3px;
+  padding: 0 1px;
+  transition: background 0.1s;
+}
+.mmw-math-inline:hover,
+.ProseMirror-selectednode .mmw-math-inline,
+.mmw-math-inline.ProseMirror-selectednode {
+  background: rgba(37,99,235,0.08);
+  outline: 1px solid rgba(37,99,235,0.25);
+}
+.mmw-math-block {
+  display: block;
+  text-align: center;
+  margin: 20px 0;
+  padding: 16px 0;
+  cursor: default;
+  border-radius: 6px;
+  transition: background 0.1s;
+  overflow-x: auto;
+}
+.mmw-math-block:hover,
+.mmw-math-block.ProseMirror-selectednode {
+  background: rgba(37,99,235,0.04);
+  outline: 2px solid rgba(37,99,235,0.2);
+  outline-offset: 2px;
+}
+.mmw-math-error {
+  color: #dc2626;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* ============================================================
+   FOOTNOTES
+   ============================================================ */
+.mmw-footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+}
+.mmw-footnote-ref a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 600;
+}
+.mmw-footnote-ref a:hover { text-decoration: underline; }
+.mmw-footnote-ref.ProseMirror-selectednode {
+  outline: 1px solid #2563eb;
+  border-radius: 2px;
+}
+
+.mmw-footnote-section {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.mmw-footnote-section ol {
+  list-style: decimal;
+  padding-left: 20px;
+  margin: 0;
+}
+.mmw-footnote-section li.mmw-footnote-item {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin: 4px 0;
+  padding-left: 4px;
+}
+
+/* ============================================================
+   TABLE OF CONTENTS
+   ============================================================ */
+#toc-panel {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  width: 220px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 0;
+  z-index: 400;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+  /* Hidden by default */
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top right;
+  transition: opacity 0.15s, transform 0.15s;
+}
+#toc-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.toc-item {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.4;
+  /* Base 16px left + per-level indent via CSS variable */
+  padding: 5px 16px 5px calc(16px + var(--toc-indent, 0px));
+  cursor: pointer;
+  color: var(--text-2);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.08s, color 0.08s;
+}
+.toc-item:hover { background: var(--border); color: var(--text); }
+.toc-h1 { font-weight: 600; color: var(--text); }
+.toc-h2 { font-weight: 500; }
+.toc-h3 { font-size: 12px; }
+.toc-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 8px 16px;
+  text-align: center;
+}
+#btn-toc.active { background: var(--border); color: var(--text); }
+
+/* Word count */
+#word-count {
+  font-size: 11.5px;
+  color: var(--text-3);
+  padding: 4px 8px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* ============================================================
    PRINT
    ============================================================ */
 @page {
@@ -517,6 +1009,18 @@ body:hover #topbar,
   h1, h2, h3 { page-break-after: avoid; break-after: avoid; }
   pre, blockquote, table { page-break-inside: avoid; break-inside: avoid; }
 
+  .mmw-page-break {
+    break-after: page;
+    page-break-after: always;
+    height: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    visibility: hidden;
+  }
+
+  .mmw-img-figure, img.mmw-image { max-width: 100%; }
+  #img-toolbar { display: none !important; }
+
   .mmw-prose pre { background: #f4f4f4 !important; border: 1px solid #ddd !important; }
   .mmw-prose code { background: #f4f4f4 !important; color: #c7254e !important; }
 
@@ -529,10 +1033,19 @@ body:hover #topbar,
     border-right: 1px solid #ddd !important;
   }
 
-  a[href^="http"]::after {
-    content: " (" attr(href) ")";
+  /* No URL annotations after links */
+  a::after { content: none !important; }
+
+  /* Footnote section styling for print */
+  .mmw-footnote-section {
+    border-top: 1px solid #ccc;
+    margin-top: 28pt;
+    padding-top: 8pt;
     font-size: 9pt;
-    color: #666;
   }
-  a[href^="#"]::after { content: none; }
+  .mmw-footnote-section ol { margin: 0; padding-left: 18pt; }
+  .mmw-footnote-section li { margin: 4pt 0; }
+
+  /* TOC panel hidden in print */
+  #toc-panel, #img-toolbar, #link-popover { display: none !important; }
 }

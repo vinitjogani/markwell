@@ -104,6 +104,84 @@ const COMMANDS: SlashCommand[] = [
       editor.chain().focus().deleteRange(range)
         .insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
   },
+  {
+    id: 'pagebreak',
+    label: 'Page Break',
+    description: 'Force a new page when printing',
+    icon: '⤶',
+    keywords: ['page', 'break', 'pagebreak', 'print', 'pdf', 'newpage'],
+    action: (editor, range) =>
+      editor.chain().focus().deleteRange(range).setPageBreak().run(),
+  },
+  {
+    id: 'math',
+    label: 'Math Block',
+    description: 'LaTeX equation (display mode)',
+    icon: '∑',
+    keywords: ['math', 'latex', 'equation', 'formula', 'katex'],
+    action: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      const latex = '\\sum_{i=1}^{n} x_i';
+      editor.chain().focus().insertContent({ type: 'blockMath', attrs: { latex } }).run();
+    },
+  },
+  {
+    id: 'tasklist',
+    label: 'Task List',
+    description: 'Checkable to-do list',
+    icon: '☑',
+    keywords: ['task', 'todo', 'checklist', 'check'],
+    action: (editor, range) =>
+      editor.chain().focus().deleteRange(range).toggleTaskList().run(),
+  },
+  {
+    id: 'emoji',
+    label: 'Emoji',
+    description: 'Insert an emoji',
+    icon: '😊',
+    keywords: ['emoji', 'emoticon', 'smile', 'icon'],
+    action: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      import('./emoji-picker').then(({ openEmojiPicker }) => openEmojiPicker(editor));
+    },
+  },
+  {
+    id: 'youtube',
+    label: 'YouTube',
+    description: 'Embed a YouTube video',
+    icon: '▶',
+    keywords: ['youtube', 'video', 'embed', 'watch'],
+    action: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      const url = window.prompt('YouTube URL:');
+      if (url) editor.chain().focus().setYoutubeVideo({ src: url }).run();
+    },
+  },
+  {
+    id: 'image',
+    label: 'Image',
+    description: 'Embed an image from your computer',
+    icon: '⊡',
+    keywords: ['image', 'img', 'photo', 'picture', 'embed'],
+    action: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      // Open a hidden file picker
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const src = e.target?.result as string;
+          if (src) editor.chain().focus().setImage({ src, width: '100%' }).run();
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    },
+  },
 ];
 
 function filterCommands(query: string): SlashCommand[] {
