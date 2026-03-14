@@ -1,9 +1,10 @@
 {
-  "name": "markmywords",
-  "displayName": "Mark My Words",
+  "name": "markwell",
+  "displayName": "Markwell",
   "description": "A beautiful Notion-like markdown editor for VS Code & Cursor",
   "version": "0.1.0",
-  "publisher": "markmywords",
+  "icon": "icon.png",
+  "publisher": "markwell",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -15,8 +16,8 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "markmywords.markdownEditor",
-        "displayName": "Mark My Words",
+        "viewType": "markwell.markdownEditor",
+        "displayName": "Markwell",
         "selector": [
           {
             "filenamePattern": "*.md"
@@ -27,17 +28,17 @@
     ],
     "commands": [
       {
-        "command": "markmywords.revealInSource",
-        "title": "Mark My Words: Reveal Selection in Source"
+        "command": "markwell.revealInSource",
+        "title": "Markwell: Reveal Selection in Source"
       },
       {
-        "command": "markmywords.print",
-        "title": "Mark My Words: Print Document"
+        "command": "markwell.print",
+        "title": "Markwell: Print Document"
       }
     ],
     "keybindings": [
       {
-        "command": "markmywords.revealInSource",
+        "command": "markwell.revealInSource",
         "key": "ctrl+shift+`",
         "mac": "cmd+shift+`"
       }

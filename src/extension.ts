@@ -4,7 +4,7 @@ import { MarkdownEditorProvider } from './MarkdownEditorProvider';
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
-      'markmywords.markdownEditor',
+      'markwell.markdownEditor',
       new MarkdownEditorProvider(context),
       {
         webviewOptions: {
@@ -16,4 +16,4 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
-export function deactivate() {}
+export function deactivate() { }

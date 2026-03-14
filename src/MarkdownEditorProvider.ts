@@ -215,7 +215,7 @@ a::after { content: none !important; }
 </body>
 </html>`;
 
-    const tmpFile = path.join(os.tmpdir(), 'markmywords-print.html');
+    const tmpFile = path.join(os.tmpdir(), 'markwell-print.html');
     const tmpUri = vscode.Uri.file(tmpFile);
     await vscode.workspace.fs.writeFile(tmpUri, Buffer.from(html, 'utf8'));
     await vscode.env.openExternal(tmpUri);
@@ -242,7 +242,7 @@ a::after { content: none !important; }
              img-src ${webview.cspSource} https: data: blob:;
              frame-src https://www.youtube-nocookie.com https://www.youtube.com;
              script-src 'nonce-${nonce}';">
-  <title>Mark My Words</title>
+  <title>Markwell</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rethink+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
