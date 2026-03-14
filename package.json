@@ -1,0 +1,75 @@
+{
+  "name": "markmywords",
+  "displayName": "Mark My Words",
+  "description": "A beautiful Notion-like markdown editor for VS Code & Cursor",
+  "version": "0.1.0",
+  "publisher": "markmywords",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "markmywords.markdownEditor",
+        "displayName": "Mark My Words",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "markmywords.revealInSource",
+        "title": "Mark My Words: Reveal Selection in Source"
+      },
+      {
+        "command": "markmywords.print",
+        "title": "Mark My Words: Print Document"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "markmywords.revealInSource",
+        "key": "ctrl+shift+`",
+        "mac": "cmd+shift+`"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "compile": "tsc -p tsconfig.json",
+    "build:webview": "node esbuild.mjs",
+    "build": "npm run compile && npm run build:webview",
+    "watch:ext": "tsc -p tsconfig.json --watch",
+    "watch:webview": "node esbuild.mjs --watch",
+    "dev": "concurrently \"npm run watch:ext\" \"npm run watch:webview\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "concurrently": "^8.2.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@tiptap/core": "^2.2.0",
+    "@tiptap/extension-placeholder": "^2.2.0",
+    "@tiptap/extension-table": "^2.27.2",
+    "@tiptap/extension-table-cell": "^2.27.2",
+    "@tiptap/extension-table-header": "^2.27.2",
+    "@tiptap/extension-table-row": "^2.27.2",
+    "@tiptap/extension-typography": "^2.2.0",
+    "@tiptap/pm": "^2.2.0",
+    "@tiptap/starter-kit": "^2.2.0",
+    "@tiptap/suggestion": "^2.2.0",
+    "tiptap-markdown": "^0.8.10"
+  }
+}
