@@ -222,31 +222,21 @@ export function initImageToolbar(editor: Editor) {
 
   editor.on('blur', () => setTimeout(hideImgToolbar, 150));
 
-  // Click image → NodeSelection (use posAtDOM on the img element for reliability)
+  // Click image → NodeSelection
+  // For a NodeView where dom === img, the reliable way to get the PM position
+  // is posAtDOM(parent, childIndex) — this gives the position just before the node.
   editor.view.dom.addEventListener('click', (e: MouseEvent) => {
     const img = (e.target as Element).closest('img.mmw-image') as HTMLElement | null;
     if (!img) return;
     try {
-      // posAtDOM gives us a position at the boundary of the atom node
-      const rawPos = editor.view.posAtDOM(img, 0);
-      const $pos   = editor.state.doc.resolve(rawPos);
-      // Walk up to find the image node
-      for (let d = $pos.depth; d >= 0; d--) {
-        const nodePos = d === 0 ? 0 : $pos.before(d);
-        const node    = editor.state.doc.nodeAt(nodePos);
-        if (node?.type.name === 'image') {
-          editor.view.dispatch(
-            editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, nodePos))
-          );
-          return;
-        }
-      }
-      // Fallback: try pos - 1 (before the atom)
-      const fallbackPos = rawPos > 0 ? rawPos - 1 : 0;
-      const fallbackNode = editor.state.doc.nodeAt(fallbackPos);
-      if (fallbackNode?.type.name === 'image') {
+      const parent = img.parentElement;
+      if (!parent) return;
+      const index  = Array.from(parent.childNodes).indexOf(img as ChildNode);
+      const pos    = editor.view.posAtDOM(parent, index);
+      const node   = editor.state.doc.nodeAt(pos);
+      if (node?.type.name === 'image') {
         editor.view.dispatch(
-          editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, fallbackPos))
+          editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos))
         );
       }
     } catch { /* ignore */ }

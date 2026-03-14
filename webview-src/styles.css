@@ -1070,13 +1070,14 @@ body.vscode-dark .mmw-prose a.mmw-link {
 }
 
 @media print {
-  #topbar, #block-actions, #format-toolbar, #slash-menu { display: none !important; }
+  /* Preserve all backgrounds, borders, and colours exactly as on screen */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  html, body {
-    background: white !important;
-    color: black !important;
-    font-size: 11pt;
-  }
+  /* Hide editor chrome */
+  #topbar, #block-actions, #format-toolbar, #slash-menu,
+  #toc-panel, #img-toolbar, #link-popover, #color-pop { display: none !important; }
+
+  html, body { font-size: 11pt; }
 
   #page {
     padding: 0;
@@ -1100,27 +1101,13 @@ body.vscode-dark .mmw-prose a.mmw-link {
     visibility: hidden;
   }
 
-  .mmw-img-figure, img.mmw-image { max-width: 100%; }
-  #img-toolbar { display: none !important; }
-
-  .mmw-prose pre { background: #f4f4f4 !important; border: 1px solid #ddd !important; }
-  .mmw-prose code { background: #f4f4f4 !important; color: #c7254e !important; }
-
-  .mmw-prose .tableWrapper {
-    border: 1px solid #ddd !important;
-  }
-  .mmw-prose th,
-  .mmw-prose td {
-    border-bottom: 1px solid #ddd !important;
-    border-right: 1px solid #ddd !important;
-  }
+  img.mmw-image { max-width: 100%; }
 
   /* No URL annotations after links */
   a::after { content: none !important; }
 
-  /* Footnote section styling for print */
+  /* Footnote section */
   .mmw-footnote-section {
-    border-top: 1px solid #ccc;
     margin-top: 28pt;
     padding-top: 8pt;
     font-size: 9pt;
@@ -1128,33 +1115,11 @@ body.vscode-dark .mmw-prose a.mmw-link {
   .mmw-footnote-section ol { margin: 0; padding-left: 18pt; }
   .mmw-footnote-section li { margin: 4pt 0; }
 
-  /* TOC panel hidden in print */
-  #toc-panel, #img-toolbar, #link-popover { display: none !important; }
-
-  /* Inline TOC print styling */
+  /* Inline TOC — keep screen look, just suppress interaction states */
   .mmw-inline-toc {
-    background: white !important;
-    border: none !important;
-    padding: 0 0 12pt !important;
-    margin: 0 0 16pt !important;
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .mmw-inline-toc .mmw-toc-header {
-    font-size: 9pt;
-    color: #666 !important;
-    border-bottom: 0.75pt solid #ccc !important;
-    margin-bottom: 8pt !important;
-    padding-bottom: 4pt !important;
-  }
-  .mmw-inline-toc .mmw-toc-entry {
-    padding: 2pt 0 !important;
-    transition: none !important;
-  }
-  .mmw-inline-toc .mmw-toc-entry:hover { background: none !important; }
-  .mmw-inline-toc .mmw-toc-text { font-size: 11pt !important; color: black !important; }
-  .mmw-inline-toc .mmw-toc-h3 .mmw-toc-text { font-size: 10pt !important; }
-  .mmw-inline-toc .mmw-toc-leader {
-    border-bottom: 1pt dotted #999 !important;
-  }
+  .mmw-inline-toc .mmw-toc-entry { transition: none !important; cursor: default !important; }
+  .mmw-inline-toc .mmw-toc-entry:hover { background: transparent !important; }
 }

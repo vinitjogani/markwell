@@ -37,6 +37,14 @@ const CURSOR_CHAT_CMDS = [
   'cursorChat.openChat',
 ];
 
+const EOF_REGEX = /(<|&lt;)!-- eof --(>|&gt;)/g;
+function stripEof(markdown: string): string {
+  return markdown.replace(EOF_REGEX, '').trimEnd();
+}
+function ensureTrailingEof(markdown: string): string {
+  return stripEof(markdown) + '\n\n<!-- eof -->\n';
+}
+
 type WebviewMessage =
   | { type: 'ready' }
   | { type: 'edit'; markdown: string }
@@ -47,7 +55,7 @@ type WebviewMessage =
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly selfEdits = new WeakMap<vscode.TextDocument, string>();
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) { }
 
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
@@ -62,6 +70,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.webview.html = this.buildHtml(webviewPanel.webview);
 
     const saveEdit = debounce(async (markdown: string) => {
+      markdown = ensureTrailingEof(markdown);
       if (document.getText() === markdown) return;
       const edit = new vscode.WorkspaceEdit();
       edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), markdown);
@@ -72,7 +81,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     const msgSub = webviewPanel.webview.onDidReceiveMessage(async (msg: WebviewMessage) => {
       switch (msg.type) {
         case 'ready':
-          webviewPanel.webview.postMessage({ type: 'init', markdown: document.getText() });
+          webviewPanel.webview.postMessage({ type: 'init', markdown: stripEof(document.getText()) });
           break;
         case 'edit':
           await saveEdit(msg.markdown);
@@ -108,7 +117,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         // isn't accidentally swallowed
         this.selfEdits.delete(document);
       }
-      webviewPanel.webview.postMessage({ type: 'update', markdown: document.getText() });
+      webviewPanel.webview.postMessage({ type: 'update', markdown: stripEof(document.getText()) });
     });
 
     webviewPanel.onDidDispose(() => { msgSub.dispose(); changeSub.dispose(); });
@@ -122,7 +131,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     triggerChat?: boolean
   ): Promise<void> {
     const anchor = document.positionAt(Math.max(0, anchorOffset));
-    const head   = document.positionAt(Math.max(0, headOffset));
+    const head = document.positionAt(Math.max(0, headOffset));
 
     // Open / focus the source file with the selection
     await vscode.window.showTextDocument(document.uri, {
@@ -177,10 +186,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   <link href="https://fonts.googleapis.com/css2?family=Rethink+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
   <style>
 ${css}
-/* Standalone print page overrides */
+/* Standalone print page — use light theme values, preserve all backgrounds */
+* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 html, body {
-  background: #fff !important;
-  color: #191919 !important;
   font-family: 'Rethink Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 #page {
@@ -191,7 +199,6 @@ html, body {
 #topbar, #block-actions, #format-toolbar, #slash-menu,
 #img-toolbar, #link-popover, #color-pop, #emoji-picker-wrap,
 #toc-panel { display: none !important; }
-/* No URL annotations after links */
 a::after { content: none !important; }
   </style>
 </head>
