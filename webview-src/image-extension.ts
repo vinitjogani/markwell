@@ -222,17 +222,31 @@ export function initImageToolbar(editor: Editor) {
 
   editor.on('blur', () => setTimeout(hideImgToolbar, 150));
 
-  // Click image → NodeSelection
+  // Click image → NodeSelection (use posAtDOM on the img element for reliability)
   editor.view.dom.addEventListener('click', (e: MouseEvent) => {
-    if (!(e.target as Element).matches('img.mmw-image')) return;
-    const result = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-    if (!result) return;
-    const nodePos = result.inside >= 0 ? result.inside : result.pos - 1;
+    const img = (e.target as Element).closest('img.mmw-image') as HTMLElement | null;
+    if (!img) return;
     try {
-      const node = editor.state.doc.nodeAt(nodePos);
-      if (node?.type.name === 'image') {
+      // posAtDOM gives us a position at the boundary of the atom node
+      const rawPos = editor.view.posAtDOM(img, 0);
+      const $pos   = editor.state.doc.resolve(rawPos);
+      // Walk up to find the image node
+      for (let d = $pos.depth; d >= 0; d--) {
+        const nodePos = d === 0 ? 0 : $pos.before(d);
+        const node    = editor.state.doc.nodeAt(nodePos);
+        if (node?.type.name === 'image') {
+          editor.view.dispatch(
+            editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, nodePos))
+          );
+          return;
+        }
+      }
+      // Fallback: try pos - 1 (before the atom)
+      const fallbackPos = rawPos > 0 ? rawPos - 1 : 0;
+      const fallbackNode = editor.state.doc.nodeAt(fallbackPos);
+      if (fallbackNode?.type.name === 'image') {
         editor.view.dispatch(
-          editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, nodePos))
+          editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, fallbackPos))
         );
       }
     } catch { /* ignore */ }

@@ -22,6 +22,8 @@ import { PageBreak } from './page-break';
 import { ImageExtension } from './image-extension';
 import { InlineMath, BlockMath } from './math-extension';
 import { FootnoteRef, FootnoteItem, FootnoteSection } from './footnote-extension';
+import { InlineToc } from './inline-toc';
+import { BlockSelectionHighlight } from './block-selection';
 
 export function createEditor(
   element: HTMLElement,
@@ -64,7 +66,7 @@ export function createEditor(
       Color,
 
       // Media
-      YoutubeExtension.configure({ nocookie: true, width: 720, height: 405 }),
+      YoutubeExtension.configure({ nocookie: true }),
 
       // Custom nodes
       PageBreak,
@@ -74,6 +76,7 @@ export function createEditor(
       FootnoteRef,
       FootnoteItem,
       FootnoteSection,
+      InlineToc,
 
       Markdown.configure({
         html:                false,
@@ -95,6 +98,7 @@ export function createEditor(
 
       Typography,
       SlashMenuExtension,
+      BlockSelectionHighlight,
     ],
 
     autofocus: false,

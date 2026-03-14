@@ -158,6 +158,15 @@ const COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'toc',
+    label: 'Table of Contents',
+    description: 'Insert a live TOC into the document',
+    icon: '§',
+    keywords: ['toc', 'table', 'contents', 'outline', 'headings'],
+    action: (editor, range) =>
+      editor.chain().focus().deleteRange(range).setInlineToc().run(),
+  },
+  {
     id: 'image',
     label: 'Image',
     description: 'Embed an image from your computer',

@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
 
 type PostFn = (msg: unknown) => void;
 
@@ -209,10 +210,17 @@ export function initFormatToolbar(editor: Editor, postMessage: PostFn) {
 
   function show(centerX: number, topY: number) {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    toolbar.style.left    = `${centerX}px`;
-    toolbar.style.top     = `${topY - window.scrollY}px`;
+    toolbar.style.top     = `${topY}px`;
     toolbar.style.display = 'flex';
-    requestAnimationFrame(() => { toolbar.classList.add('visible'); isVisible = true; });
+    requestAnimationFrame(() => {
+      // Clamp so the toolbar never goes off the left or right edge
+      const tbHalf = toolbar.offsetWidth / 2;
+      const margin = 8;
+      const clamped = Math.max(margin + tbHalf, Math.min(window.innerWidth - margin - tbHalf, centerX));
+      toolbar.style.left = `${clamped}px`;
+      toolbar.classList.add('visible');
+      isVisible = true;
+    });
   }
 
   function hide(immediate = false) {
@@ -277,6 +285,11 @@ export function initFormatToolbar(editor: Editor, postMessage: PostFn) {
   // ---- React to selection ----
 
   editor.on('selectionUpdate', ({ editor: ed }) => {
+    // NodeSelection (e.g. image selected) → format toolbar not relevant
+    if (ed.state.selection instanceof NodeSelection) {
+      hide(true);
+      return;
+    }
     if (ed.state.selection.empty) {
       if (ed.isActive('link')) {
         const anchor = window.getSelection()?.anchorNode?.parentElement?.closest('a');
@@ -293,6 +306,8 @@ export function initFormatToolbar(editor: Editor, postMessage: PostFn) {
 
   document.addEventListener('mouseup', () => {
     setTimeout(() => {
+      // Don't show for NodeSelection (image etc.)
+      if (editor.state.selection instanceof NodeSelection) return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) { if (!auxPopupOpen) hide(); return; }
       positionAboveSelection();
