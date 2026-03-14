@@ -24,6 +24,7 @@ import { InlineMath, BlockMath } from './math-extension';
 import { FootnoteRef, FootnoteItem, FootnoteSection } from './footnote-extension';
 import { InlineToc } from './inline-toc';
 import { BlockSelectionHighlight } from './block-selection';
+import { HeadingWithIds } from './heading-ids';
 
 export function createEditor(
   element: HTMLElement,
@@ -34,10 +35,11 @@ export function createEditor(
     element,
     extensions: [
       StarterKit.configure({
-        heading:   { levels: [1, 2, 3] },
+        heading:   false,
         code:      { HTMLAttributes: { spellcheck: 'false' } },
         codeBlock: { HTMLAttributes: { spellcheck: 'false' } },
       }),
+      HeadingWithIds.configure({ levels: [1, 2, 3] }),
 
       // Tables
       Table.configure({ resizable: false }),

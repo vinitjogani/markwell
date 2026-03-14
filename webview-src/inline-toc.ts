@@ -13,6 +13,7 @@
 
 import { Node, mergeAttributes } from '@tiptap/core';
 import type { NodeViewRendererProps } from '@tiptap/core';
+import { buildHeadingSlugs } from './heading-ids';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -69,6 +70,8 @@ export const InlineToc = Node.create({
           }
         });
 
+        const slugs = buildHeadingSlugs(editor.state.doc);
+
         if (entries.length === 0) {
           dom.innerHTML = `
             <div class="mmw-toc-header">Contents</div>
@@ -81,14 +84,16 @@ export const InlineToc = Node.create({
           entries.map(e => {
             const indent = (e.level - 1) * 16;
             const cls = `mmw-toc-entry mmw-toc-h${e.level}`;
-            return `<div class="${cls}" style="--toc-indent:${indent}px" data-pos="${e.pos}">` +
+            const slug = slugs.get(e.pos) ?? `pos-${e.pos}`;
+            return `<a class="${cls}" href="#${slug}" style="--toc-indent:${indent}px" data-pos="${e.pos}">` +
               `<span class="mmw-toc-text">${e.text || '<em>Untitled</em>'}</span>` +
               `<span class="mmw-toc-leader"></span>` +
-              `</div>`;
+              `</a>`;
           }).join('');
 
         dom.querySelectorAll<HTMLElement>('.mmw-toc-entry').forEach(el => {
-          el.addEventListener('click', () => {
+          el.addEventListener('click', (ev) => {
+            ev.preventDefault();
             const pos = parseInt(el.dataset.pos!, 10);
             editor.commands.focus();
             editor.commands.setTextSelection(pos);

@@ -1030,6 +1030,8 @@ body.vscode-dark .mmw-prose a.mmw-link {
   cursor: pointer;
   border-radius: 3px;
   transition: background 0.12s;
+  text-decoration: none;
+  color: inherit;
 }
 
 .mmw-inline-toc .mmw-toc-entry:hover {
