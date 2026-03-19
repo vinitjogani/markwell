@@ -188,15 +188,29 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
 });
 
 // ---- Toolbar buttons ----
-document.getElementById('btn-reveal')!.addEventListener('click', () => {
+function revealSelectionInSource() {
   const { empty } = editor.state.selection;
   post({ type: 'revealInSource', ...(empty ? { anchorPos: 0, headPos: 0 } : getSelectionOffsets()) });
-});
+}
 
-document.getElementById('btn-print')!.addEventListener('click', () => {
+function printDocument() {
   const proseHtml = (editor.view.dom as HTMLElement).innerHTML;
   post({ type: 'print', proseHtml });
-});
+}
+
+function bindTopbarButton(id: string, action: () => void) {
+  const button = document.getElementById(id)!;
+  button.addEventListener('pointerdown', (e: PointerEvent) => {
+    e.preventDefault();
+    action();
+  });
+  button.addEventListener('click', (e: MouseEvent) => {
+    if (e.detail === 0) action();
+  });
+}
+
+bindTopbarButton('btn-reveal', revealSelectionInSource);
+bindTopbarButton('btn-print', printDocument);
 
 // ---- Live doc title (from first H1) ----
 function updateDocTitle() {
