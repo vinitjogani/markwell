@@ -182,7 +182,7 @@ function showLinkInput(toolbar: HTMLElement, onConfirm: (url: string) => void, i
   input.addEventListener('blur', done, { once: true });
 }
 
-function promptLink(editor: Editor, editExisting = false) {
+export function promptLink(editor: Editor, editExisting = false) {
   const toolbar   = document.getElementById('format-toolbar')!;
   const existing  = editExisting ? editor.getAttributes('link').href || '' : '';
   showLinkInput(toolbar, (url) => {

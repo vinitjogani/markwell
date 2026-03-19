@@ -50,26 +50,114 @@ function getSelectionOffsets() {
   return { anchorPos: pmPosToMdOffset(ranges, from), headPos: pmPosToMdOffset(ranges, to) };
 }
 
+function applyExternalMarkdown(markdown: string) {
+  if (getMarkdown() === markdown) return;
+
+  const prevSelection = editor.state.selection;
+  isUpdatingFromExtension = true;
+  editor.commands.setContent(markdown, false);
+  isUpdatingFromExtension = false;
+
+  const maxPos = Math.max(1, editor.state.doc.content.size);
+  const from = Math.max(1, Math.min(prevSelection.from, maxPos));
+  const to = Math.max(1, Math.min(prevSelection.to, maxPos));
+  editor.commands.setTextSelection({ from, to });
+}
+
 // ---- Extension → Webview ----
 window.addEventListener('message', (event: MessageEvent) => {
-  const msg = event.data as { type: string; markdown?: string };
+  const msg = event.data as { type: string; markdown?: string; format?: string };
   switch (msg.type) {
     case 'init':
     case 'update':
       if (msg.markdown == null) return;
-      isUpdatingFromExtension = true;
-      editor.commands.setContent(msg.markdown, false);
-      isUpdatingFromExtension = false;
+      applyExternalMarkdown(msg.markdown);
       updateDocTitle();
       updateWordCount();
+      break;
+    case 'format':
+      if (msg.format === 'bold') editor.chain().focus().toggleBold().run();
+      else if (msg.format === 'italic') editor.chain().focus().toggleItalic().run();
+      else if (msg.format === 'underline') editor.chain().focus().toggleUnderline().run();
+      else if (msg.format === 'link') {
+        if (editor.isActive('link')) editor.chain().focus().unsetLink().run();
+        else import('./format-toolbar').then(({ promptLink }) => promptLink(editor));
+      }
+      break;
+    case 'requestContentForSave':
+      post({ type: 'contentForSave', markdown: getMarkdown() });
       break;
   }
 });
 
+editorEl.addEventListener('focusin', () => post({ type: 'focus' }));
+editorEl.addEventListener('focusout', (e: FocusEvent) => {
+  if (!e.relatedTarget || !editorEl.contains(e.relatedTarget as Node)) {
+    post({ type: 'blur' });
+  }
+});
+
 // ---- Keyboard shortcuts ----
+function handleFormatShortcut(e: KeyboardEvent): boolean {
+  const cmd = e.metaKey || e.ctrlKey;
+  if (!cmd || e.shiftKey || e.altKey) return false;
+
+  const key = e.key.toLowerCase();
+  if (key === 'b') {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    editor.chain().focus().toggleBold().run();
+    return true;
+  }
+  if (key === 'i') {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    editor.chain().focus().toggleItalic().run();
+    return true;
+  }
+  if (key === 'u') {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    editor.chain().focus().toggleUnderline().run();
+    return true;
+  }
+  if (key === 'k') {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (editor.isActive('link')) editor.chain().focus().unsetLink().run();
+    else import('./format-toolbar').then(({ promptLink }) => promptLink(editor));
+    return true;
+  }
+
+  return false;
+}
+
+function handleSaveShortcut(e: KeyboardEvent): boolean {
+  const cmd = e.metaKey || e.ctrlKey;
+  if (!cmd || e.shiftKey || e.altKey) return false;
+  if (e.key.toLowerCase() !== 's') return false;
+
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  post({ type: 'save', markdown: getMarkdown() });
+  return true;
+}
+
+window.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (handleSaveShortcut(e)) return;
+  handleFormatShortcut(e);
+}, { capture: true });
+
 document.addEventListener('keydown', (e: KeyboardEvent) => {
   const cmd = e.metaKey || e.ctrlKey;
   if (!cmd) return;
+  if (handleSaveShortcut(e)) return;
+  if (handleFormatShortcut(e)) return;
 
   // ⌘⇧K → reveal + trigger Cursor inline edit
   if (e.shiftKey && (e.key === 'K' || e.key === 'k')) {

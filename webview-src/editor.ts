@@ -17,6 +17,7 @@ import { YoutubeExtension } from './youtube-extension';
 import Color from '@tiptap/extension-color';
 import TextStyle from '@tiptap/extension-text-style';
 import { Markdown } from 'tiptap-markdown';
+import { ParagraphWithNbsp } from './paragraph-nbsp';
 import { SlashMenuExtension } from './slash-menu';
 import { PageBreak } from './page-break';
 import { ImageExtension } from './image-extension';
@@ -36,9 +37,11 @@ export function createEditor(
     extensions: [
       StarterKit.configure({
         heading:   false,
+        paragraph: false,
         code:      { HTMLAttributes: { spellcheck: 'false' } },
         codeBlock: { HTMLAttributes: { spellcheck: 'false' } },
       }),
+      ParagraphWithNbsp,
       HeadingWithIds.configure({ levels: [1, 2, 3] }),
 
       // Tables

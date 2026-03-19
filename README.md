@@ -68,18 +68,18 @@ Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/) (w
 
 ### Keyboard Shortcuts
 
+Format shortcuts (`⌘B`, `⌘I`, `⌘U`, `⌘K`) are registered to fire only when the Markwell editor has focus, so they won't trigger IDE actions (e.g. toggle sidebar).
 
-| Shortcut     | Action                          |
-| ------------ | ------------------------------- |
-| `⌘/Ctrl + B` | Bold                            |
-| `⌘/Ctrl + I` | Italic                          |
-| `⌘/Ctrl + U` | Underline                       |
-| `⌘/Ctrl + K` | Add link                        |
-| `/`          | Open slash command menu         |
-| `⌘⇧↵`        | Reveal in source (Cursor: `⌘⇧`) |
-| `⌘⇧K`        | Reveal + inline edit (Cursor)   |
-| `⌘⇧L`        | Reveal + chat (Cursor)          |
-
+| Shortcut | Action |
+| --- | --- |
+| `⌘/Ctrl + B` | Bold |
+| `⌘/Ctrl + I` | Italic |
+| `⌘/Ctrl + U` | Underline |
+| `⌘/Ctrl + K` | Add link |
+| `/` | Open slash command menu |
+| `⌘⇧↵` | Reveal in source (Cursor: `⌘⇧`) |
+| `⌘⇧K` | Reveal + inline edit (Cursor) |
+| `⌘⇧L` | Reveal + chat (Cursor) |
 
 ## Requirements
 
@@ -131,3 +131,5 @@ Press `F5` in VS Code to launch an Extension Development Host with the extension
 ## License
 
 MIT
+
+<!-- eof -->

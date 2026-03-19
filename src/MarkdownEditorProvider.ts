@@ -11,15 +11,6 @@ function getNonce() {
   return text;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
-  let timer: ReturnType<typeof setTimeout>;
-  return ((...args: Parameters<T>) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
-  }) as T;
-}
-
 function sleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
 
 // Cursor command IDs to try in order. These vary by Cursor version.
@@ -48,14 +39,57 @@ function ensureTrailingEof(markdown: string): string {
 type WebviewMessage =
   | { type: 'ready' }
   | { type: 'edit'; markdown: string }
+  | { type: 'save'; markdown: string }
   | { type: 'selectionChange'; anchorPos: number; headPos: number; selectedText: string }
   | { type: 'revealInSource'; anchorPos: number; headPos: number; triggerInlineEdit?: boolean; triggerChat?: boolean }
-  | { type: 'print'; proseHtml: string };
+  | { type: 'print'; proseHtml: string }
+  | { type: 'contentForSave'; markdown: string }
+  | { type: 'focus' }
+  | { type: 'blur' };
+
+let activePanel: vscode.WebviewPanel | null = null;
+const documentPanels = new Map<string, vscode.WebviewPanel>();
+let pendingSaveResolvers = new Map<string, (markdown: string) => void>();
+const expectedDocumentEdits = new Map<string, string>();
 
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly selfEdits = new WeakMap<vscode.TextDocument, string>();
 
   constructor(private readonly context: vscode.ExtensionContext) { }
+
+  static postToActivePanel(message: unknown): boolean {
+    if (activePanel) {
+      activePanel.webview.postMessage(message);
+      return true;
+    }
+    return false;
+  }
+
+  static requestContentBeforeSave(document: vscode.TextDocument): Promise<string | null> {
+    const uri = document.uri.toString();
+    const panel = documentPanels.get(uri);
+    if (!panel) return Promise.resolve(null);
+    return new Promise<string | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        pendingSaveResolvers.delete(uri);
+        resolve(null);
+      }, 800);
+      pendingSaveResolvers.set(uri, (markdown: string) => {
+        clearTimeout(timeout);
+        resolve(markdown);
+      });
+      panel.webview.postMessage({ type: 'requestContentForSave' });
+    });
+  }
+
+  static async applyMarkdownToDocument(document: vscode.TextDocument, markdown: string): Promise<void> {
+    const normalized = ensureTrailingEof(markdown);
+    if (document.getText() === normalized) return;
+    expectedDocumentEdits.set(document.uri.toString(), normalized);
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), normalized);
+    await vscode.workspace.applyEdit(edit);
+  }
 
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
@@ -68,15 +102,37 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     };
 
     webviewPanel.webview.html = this.buildHtml(webviewPanel.webview);
+    documentPanels.set(document.uri.toString(), webviewPanel);
 
-    const saveEdit = debounce(async (markdown: string) => {
+    const applyEditImmediate = async (markdown: string) => {
       markdown = ensureTrailingEof(markdown);
       if (document.getText() === markdown) return;
+      expectedDocumentEdits.set(document.uri.toString(), markdown);
       const edit = new vscode.WorkspaceEdit();
       edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), markdown);
       this.selfEdits.set(document, markdown);
       await vscode.workspace.applyEdit(edit);
-    }, 400);
+    };
+
+    let pendingMarkdown: string | null = null;
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    const cancelPendingSave = () => {
+      pendingMarkdown = null;
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = undefined;
+      }
+    };
+    const saveEdit = (markdown: string) => {
+      pendingMarkdown = markdown;
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        const next = pendingMarkdown;
+        pendingMarkdown = null;
+        saveTimer = undefined;
+        if (next != null) void applyEditImmediate(next);
+      }, 400);
+    };
 
     const msgSub = webviewPanel.webview.onDidReceiveMessage(async (msg: WebviewMessage) => {
       switch (msg.type) {
@@ -84,7 +140,32 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
           webviewPanel.webview.postMessage({ type: 'init', markdown: stripEof(document.getText()) });
           break;
         case 'edit':
-          await saveEdit(msg.markdown);
+          saveEdit(msg.markdown);
+          break;
+        case 'save':
+          cancelPendingSave();
+          await applyEditImmediate(msg.markdown);
+          await document.save();
+          break;
+        case 'contentForSave':
+          {
+            cancelPendingSave();
+            const resolve = pendingSaveResolvers.get(document.uri.toString());
+            if (resolve) {
+              pendingSaveResolvers.delete(document.uri.toString());
+              resolve(msg.markdown);
+            }
+          }
+          break;
+        case 'focus':
+          activePanel = webviewPanel;
+          vscode.commands.executeCommand('setContext', 'markwellEditorFocused', true);
+          break;
+        case 'blur':
+          if (activePanel === webviewPanel) {
+            activePanel = null;
+            vscode.commands.executeCommand('setContext', 'markwellEditorFocused', false);
+          }
           break;
         case 'selectionChange':
           break;
@@ -100,9 +181,28 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
 
+    webviewPanel.onDidChangeViewState(() => {
+      if (webviewPanel.active) {
+        activePanel = webviewPanel;
+        vscode.commands.executeCommand('setContext', 'markwellEditorFocused', true);
+      } else if (activePanel === webviewPanel) {
+        activePanel = null;
+        vscode.commands.executeCommand('setContext', 'markwellEditorFocused', false);
+      }
+    });
+
     const changeSub = vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.document.uri.toString() !== document.uri.toString()) return;
       if (e.contentChanges.length === 0) return;
+      const expected = expectedDocumentEdits.get(document.uri.toString());
+      if (expected !== undefined) {
+        if (expected.trimEnd() === document.getText().trimEnd()) {
+          expectedDocumentEdits.delete(document.uri.toString());
+          this.selfEdits.delete(document);
+          return;
+        }
+        expectedDocumentEdits.delete(document.uri.toString());
+      }
       const pending = this.selfEdits.get(document);
       if (pending !== undefined) {
         // Normalize trailing whitespace before comparing — tiptap-markdown can
@@ -120,7 +220,17 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
       webviewPanel.webview.postMessage({ type: 'update', markdown: stripEof(document.getText()) });
     });
 
-    webviewPanel.onDidDispose(() => { msgSub.dispose(); changeSub.dispose(); });
+    webviewPanel.onDidDispose(() => {
+      pendingSaveResolvers.delete(document.uri.toString());
+      expectedDocumentEdits.delete(document.uri.toString());
+      documentPanels.delete(document.uri.toString());
+      if (activePanel === webviewPanel) {
+        activePanel = null;
+        vscode.commands.executeCommand('setContext', 'markwellEditorFocused', false);
+      }
+      msgSub.dispose();
+      changeSub.dispose();
+    });
   }
 
   private async revealInSource(

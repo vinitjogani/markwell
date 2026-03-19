@@ -34,6 +34,22 @@
             {
                 "command": "markwell.print",
                 "title": "Markwell: Print Document"
+            },
+            {
+                "command": "markwell.formatBold",
+                "title": "Markwell: Bold"
+            },
+            {
+                "command": "markwell.formatItalic",
+                "title": "Markwell: Italic"
+            },
+            {
+                "command": "markwell.formatUnderline",
+                "title": "Markwell: Underline"
+            },
+            {
+                "command": "markwell.formatLink",
+                "title": "Markwell: Add Link"
             }
         ],
         "keybindings": [
