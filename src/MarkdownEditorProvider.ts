@@ -48,9 +48,53 @@ type WebviewMessage =
   | { type: 'blur' };
 
 let activePanel: vscode.WebviewPanel | null = null;
-const documentPanels = new Map<string, vscode.WebviewPanel>();
+/** All Markwell webviews per document URI (multiple VS Code windows can each host one). */
+const documentPanels = new Map<string, vscode.WebviewPanel[]>();
+const lastFocusedPanelByUri = new Map<string, vscode.WebviewPanel>();
 let pendingSaveResolvers = new Map<string, (markdown: string) => void>();
 const expectedDocumentEdits = new Map<string, string>();
+
+function addDocumentPanel(uri: string, panel: vscode.WebviewPanel) {
+  const list = documentPanels.get(uri) ?? [];
+  list.push(panel);
+  documentPanels.set(uri, list);
+}
+
+function removeDocumentPanel(uri: string, panel: vscode.WebviewPanel) {
+  const list = documentPanels.get(uri);
+  if (!list) return;
+  const i = list.indexOf(panel);
+  if (i < 0) return;
+  list.splice(i, 1);
+  if (list.length === 0) {
+    documentPanels.delete(uri);
+    if (lastFocusedPanelByUri.get(uri) === panel) lastFocusedPanelByUri.delete(uri);
+    return;
+  }
+  if (lastFocusedPanelByUri.get(uri) === panel) {
+    lastFocusedPanelByUri.set(uri, list[list.length - 1]!);
+  }
+}
+
+function pickPanelForDocument(document: vscode.TextDocument): vscode.WebviewPanel | undefined {
+  const uri = document.uri.toString();
+  const panels = documentPanels.get(uri);
+  if (!panels?.length) return undefined;
+
+  const ae = vscode.window.activeTextEditor;
+  if (ae && ae.document.uri.toString() === uri) {
+    const col = ae.viewColumn;
+    if (col !== undefined) {
+      const byCol = panels.find((p) => p.viewColumn === col);
+      if (byCol) return byCol;
+    }
+  }
+
+  const last = lastFocusedPanelByUri.get(uri);
+  if (last && panels.includes(last)) return last;
+
+  return panels[panels.length - 1];
+}
 
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly selfEdits = new WeakMap<vscode.TextDocument, string>();
@@ -58,6 +102,14 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   constructor(private readonly context: vscode.ExtensionContext) { }
 
   static postToActivePanel(message: unknown): boolean {
+    const ae = vscode.window.activeTextEditor;
+    if (ae?.document.languageId === 'markdown') {
+      const panel = pickPanelForDocument(ae.document);
+      if (panel) {
+        panel.webview.postMessage(message);
+        return true;
+      }
+    }
     if (activePanel) {
       activePanel.webview.postMessage(message);
       return true;
@@ -67,7 +119,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   static requestContentBeforeSave(document: vscode.TextDocument): Promise<string | null> {
     const uri = document.uri.toString();
-    const panel = documentPanels.get(uri);
+    const panel = pickPanelForDocument(document);
     if (!panel) return Promise.resolve(null);
     return new Promise<string | null>((resolve) => {
       const timeout = setTimeout(() => {
@@ -102,7 +154,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     };
 
     webviewPanel.webview.html = this.buildHtml(webviewPanel.webview);
-    documentPanels.set(document.uri.toString(), webviewPanel);
+    addDocumentPanel(document.uri.toString(), webviewPanel);
 
     const applyEditImmediate = async (markdown: string) => {
       markdown = ensureTrailingEof(markdown);
@@ -159,6 +211,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
           break;
         case 'focus':
           activePanel = webviewPanel;
+          lastFocusedPanelByUri.set(document.uri.toString(), webviewPanel);
           vscode.commands.executeCommand('setContext', 'markwellEditorFocused', true);
           break;
         case 'blur':
@@ -184,6 +237,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.onDidChangeViewState(() => {
       if (webviewPanel.active) {
         activePanel = webviewPanel;
+        lastFocusedPanelByUri.set(document.uri.toString(), webviewPanel);
         vscode.commands.executeCommand('setContext', 'markwellEditorFocused', true);
       } else if (activePanel === webviewPanel) {
         activePanel = null;
@@ -223,7 +277,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.onDidDispose(() => {
       pendingSaveResolvers.delete(document.uri.toString());
       expectedDocumentEdits.delete(document.uri.toString());
-      documentPanels.delete(document.uri.toString());
+      removeDocumentPanel(document.uri.toString(), webviewPanel);
       if (activePanel === webviewPanel) {
         activePanel = null;
         vscode.commands.executeCommand('setContext', 'markwellEditorFocused', false);
