@@ -71,7 +71,8 @@
     "build": "npm run compile && npm run build:webview",
     "watch:ext": "tsc -p tsconfig.json --watch",
     "watch:webview": "node esbuild.mjs --watch",
-    "dev": "concurrently \"npm run watch:ext\" \"npm run watch:webview\""
+    "dev": "concurrently \"npm run watch:ext\" \"npm run watch:webview\"",
+    "publish": "vsce publish && ovsx publish"
   },
   "devDependencies": {
     "@types/katex": "^0.16.8",

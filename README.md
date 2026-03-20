@@ -2,6 +2,8 @@
 
 A beautiful Notion-like markdown editor for Visual Studio Code and Cursor. Edit your `.md` files in a rich WYSIWYG-style interface while keeping plain markdown on disk.
 
+<!-- toc -->
+
 ## Features
 
 ### Rich Block Editor
