@@ -46,6 +46,11 @@
   --slash-sel: #f0f0ef;
   --slash-icon: #e9e9e7;
 
+  --surface-2: #f8f8f8;
+  --surface-3: rgba(0, 0, 0, 0.05);
+  --toc-sh:
+    0 4px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+
   --ft-bg: #1f1f1f;
   --ft-text: #f0f0f0;
   --ft-sep: rgba(255, 255, 255, 0.12);
@@ -73,12 +78,21 @@ body.vscode-dark {
   --slash-sh: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --slash-sel: #2e2e2e;
   --slash-icon: #2e2e2e;
+
+  --surface-2: #222222;
+  --surface-3: rgba(255, 255, 255, 0.06);
+  --toc-sh:
+    0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* ---- Base ---- */
-html,
+html {
+  min-height: 100%;
+  background: var(--bg);
+}
+
 body {
-  height: 100%;
+  min-height: 100%;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -1082,9 +1096,7 @@ body.vscode-dark .mmw-prose a.mmw-link {
   border-radius: 10px;
   padding: 12px 0;
   z-index: 400;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--toc-sh);
   /* Hidden by default */
   opacity: 0;
   pointer-events: none;
@@ -1154,8 +1166,8 @@ body.vscode-dark .mmw-prose a.mmw-link {
    ============================================================ */
 
 .mmw-inline-toc {
-  background: var(--surface-2, #f8f8f8);
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 20px 24px 16px;
   margin: 20px 0;
@@ -1168,15 +1180,15 @@ body.vscode-dark .mmw-prose a.mmw-link {
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-3, #999);
+  color: var(--text-3);
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-bottom: 1px solid var(--border);
 }
 
 .mmw-inline-toc .mmw-toc-empty {
   font-size: 13px;
-  color: var(--text-3, #bbb);
+  color: var(--text-3);
   font-style: italic;
 }
 
@@ -1194,12 +1206,12 @@ body.vscode-dark .mmw-prose a.mmw-link {
 }
 
 .mmw-inline-toc .mmw-toc-entry:hover {
-  background: var(--surface-3, rgba(0, 0, 0, 0.05));
+  background: var(--surface-3);
 }
 
 .mmw-inline-toc .mmw-toc-text {
   font-size: 14px;
-  color: var(--text, #1a1a1a);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1215,13 +1227,13 @@ body.vscode-dark .mmw-prose a.mmw-link {
 }
 .mmw-inline-toc .mmw-toc-h3 .mmw-toc-text {
   font-size: 13px;
-  color: var(--text-2, #555);
+  color: var(--text-2);
 }
 
 .mmw-inline-toc .mmw-toc-leader {
   flex: 1;
   height: 1px;
-  border-bottom: 1.5px dotted var(--border, rgba(0, 0, 0, 0.2));
+  border-bottom: 1.5px dotted var(--border);
   margin: 0 6px;
   min-width: 16px;
   align-self: center;
