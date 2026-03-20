@@ -2,7 +2,7 @@
   "name": "markwell",
   "displayName": "Markwell",
   "description": "A beautiful Notion-like markdown editor for VS Code & Cursor",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "icon": "icon.png",
   "publisher": "vnj",
   "engines": {
