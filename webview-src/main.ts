@@ -1,6 +1,7 @@
 import { createEditor } from './editor';
 import { buildPmToMarkdownMap, pmPosToMdOffset } from './selection-sync';
 import { initDragHandles } from './drag-handle';
+import { initTableHoverUI } from './table-hover-ui';
 import { initFormatToolbar } from './format-toolbar';
 import { addImagePasteHandler, initImageToolbar } from './image-extension';
 import { initToc } from './toc';
@@ -231,6 +232,7 @@ editor.on('update', updateWordCount);
 
 // ---- Init sub-systems ----
 initDragHandles(editor);
+initTableHoverUI(editor);
 initFormatToolbar(editor, post);
 addImagePasteHandler(editor);
 initImageToolbar(editor);
