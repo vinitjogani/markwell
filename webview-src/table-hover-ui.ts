@@ -17,24 +17,21 @@ function findTableWrapper(el: Node | null): HTMLElement | null {
   return null;
 }
 
-function findTableEl(el: Node | null): HTMLTableElement | null {
-  while (el) {
-    if (el instanceof HTMLTableElement) return el;
-    el = el.parentElement;
+function getCellPos(editor: Editor, cell: HTMLTableCellElement): number | null {
+  try {
+    const pos = editor.view.posAtDOM(cell, 0);
+    const $pos = editor.state.doc.resolve(pos);
+    return $pos.pos + 1;
+  } catch {
+    return null;
   }
-  return null;
-}
-
-function getCellPos(editor: Editor, cell: HTMLTableCellElement): number {
-  const pos = editor.view.posAtDOM(cell, 0);
-  const $pos = editor.state.doc.resolve(pos);
-  return $pos.pos + 1;
 }
 
 function getTableNode(editor: Editor, tableEl: HTMLTableElement): { pos: number; node: ProseNode } | null {
   const cell = tableEl.querySelector('th, td');
   if (!cell) return null;
   const cellPos = getCellPos(editor, cell as HTMLTableCellElement);
+  if (cellPos == null) return null;
   const $pos = editor.state.doc.resolve(cellPos);
   for (let d = $pos.depth; d > 0; d--) {
     const node = $pos.node(d);
@@ -48,12 +45,6 @@ function columnIndex(cell: HTMLTableCellElement): number {
   if (!row) return 0;
   const cells = Array.from(row.querySelectorAll('th, td'));
   return cells.indexOf(cell);
-}
-
-function rowIndex(tr: HTMLTableRowElement): number {
-  const tbody = tr.closest('tbody, thead');
-  if (!tbody) return 0;
-  return Array.from(tbody.querySelectorAll('tr')).indexOf(tr);
 }
 
 function isHeaderRow(tr: HTMLTableRowElement): boolean {
@@ -74,6 +65,9 @@ function sortTable(editor: Editor, tableEl: HTMLTableElement, colIndex: number, 
     else bodyRows.push(row);
   });
   if (bodyRows.length <= 1) return;
+
+  const colCount = headerRows[0]?.childCount ?? bodyRows[0]?.childCount ?? 0;
+  if (colIndex >= colCount) return;
 
   const getCellText = (row: ProseNode, i: number): string => {
     const cell = row.child(i);
@@ -101,15 +95,19 @@ function moveColumn(editor: Editor, tableEl: HTMLTableElement, fromCol: number, 
   const info = getTableNode(editor, tableEl);
   if (!info || fromCol === toCol) return;
   const { pos, node } = info;
-  const schema = editor.state.schema;
+  const colCount = node.firstChild?.childCount ?? 0;
+  if (fromCol < 0 || fromCol >= colCount || toCol < 0 || toCol >= colCount) return;
+
   const newRows: ProseNode[] = [];
   node.forEach((row) => {
     const cells: ProseNode[] = [];
     row.forEach((cell) => cells.push(cell));
-    const [extracted] = cells.splice(fromCol, 1);
+    const extracted = cells.splice(fromCol, 1)[0];
+    if (!extracted) return;
     cells.splice(toCol, 0, extracted);
     newRows.push(row.type.create(row.attrs, cells));
   });
+  if (newRows.length !== node.childCount) return;
   const newTable = node.type.create(node.attrs, newRows);
   const tr = editor.state.tr.replaceWith(pos, pos + node.nodeSize, newTable);
   editor.view.dispatch(tr);
@@ -188,6 +186,7 @@ export function initTableHoverUI(editor: Editor) {
       hideAll();
       return;
     }
+    if (ctrlElements.some((c) => c.contains(elAt))) return;
 
     const wrapper = findTableWrapper(e.target as Node);
     const tableEl = wrapper?.querySelector('table') ?? null;
@@ -241,16 +240,13 @@ export function initTableHoverUI(editor: Editor) {
       headerMenu.classList.add('visible');
       headerMenu.style.left = `${hr.right - 90}px`;
       headerMenu.style.top = `${hr.top + HEADER_CONTROL_OFFSET}px`;
+      colDragHandle.classList.add('visible');
+      colDragHandle.style.left = `${hr.left - 20}px`;
+      colDragHandle.style.top = `${hr.top + hr.height / 2 - 8}px`;
+      colDragHandle.dataset.colIndex = String(columnIndex(headerCell));
       addColBtn.classList.remove('visible');
       addRowBtn.classList.remove('visible');
       rowDeleteBtn.classList.remove('visible');
-
-      const colIdx = columnIndex(headerCell);
-      const thRect = headerCell.getBoundingClientRect();
-      colDragHandle.classList.add('visible');
-      colDragHandle.style.left = `${thRect.left - 20}px`;
-      colDragHandle.style.top = `${thRect.top + thRect.height / 2 - 8}px`;
-      colDragHandle.dataset.colIndex = String(colIdx);
       return;
     }
 
@@ -279,8 +275,8 @@ export function initTableHoverUI(editor: Editor) {
     const lastRow = activeTable.querySelector('tr');
     const cells = lastRow?.querySelectorAll('th, td');
     const lastCell = cells?.[cells.length - 1];
-    if (!lastCell) return;
-    const pos = getCellPos(editor, lastCell as HTMLTableCellElement);
+    const pos = lastCell ? getCellPos(editor, lastCell as HTMLTableCellElement) : null;
+    if (pos == null) return;
     editor.chain().focus().setTextSelection(pos).addColumnAfter().run();
     hideAll();
   });
@@ -292,8 +288,8 @@ export function initTableHoverUI(editor: Editor) {
     const rows = activeTable.querySelectorAll('tr');
     const lastRow = rows[rows.length - 1];
     const firstCell = lastRow?.querySelector('th, td');
-    if (!firstCell) return;
-    const pos = getCellPos(editor, firstCell as HTMLTableCellElement);
+    const pos = firstCell ? getCellPos(editor, firstCell as HTMLTableCellElement) : null;
+    if (pos == null) return;
     editor.chain().focus().setTextSelection(pos).addRowAfter().run();
     hideAll();
   });
@@ -325,7 +321,7 @@ export function initTableHoverUI(editor: Editor) {
     e.stopPropagation();
     if (activeTable && activeHeaderCell) {
       const pos = getCellPos(editor, activeHeaderCell);
-      editor.chain().focus().setTextSelection(pos).deleteColumn().run();
+      if (pos != null) editor.chain().focus().setTextSelection(pos).deleteColumn().run();
     }
     hideAll();
   });
@@ -335,8 +331,8 @@ export function initTableHoverUI(editor: Editor) {
     e.stopPropagation();
     if (!activeRow) return;
     const firstCell = activeRow.querySelector('th, td');
-    if (!firstCell) return;
-    const pos = getCellPos(editor, firstCell as HTMLTableCellElement);
+    const pos = firstCell ? getCellPos(editor, firstCell as HTMLTableCellElement) : null;
+    if (pos == null) return;
     editor.chain().focus().setTextSelection(pos).deleteRow().run();
     hideAll();
   });
