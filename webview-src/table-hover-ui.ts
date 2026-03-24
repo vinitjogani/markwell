@@ -9,10 +9,17 @@ import type { Node as ProseNode } from '@tiptap/pm/model';
 const EDGE_ZONE = 24;
 const HEADER_CONTROL_OFFSET = 4;
 
-function findTableWrapper(el: Node | null): HTMLElement | null {
-  while (el) {
-    if (el instanceof HTMLElement && el.classList?.contains('tableWrapper')) return el;
-    el = el.parentElement;
+function findTableContainer(el: Node | null): { container: HTMLElement; table: HTMLTableElement } | null {
+  let node: Node | null = el;
+  while (node) {
+    if (node instanceof HTMLTableElement) {
+      return { container: node, table: node };
+    }
+    if (node instanceof HTMLElement && node.classList?.contains('tableWrapper')) {
+      const table = node.querySelector('table');
+      return table ? { container: node, table } : null;
+    }
+    node = node.parentElement;
   }
   return null;
 }
@@ -151,7 +158,7 @@ export function initTableHoverUI(editor: Editor) {
   document.body.appendChild(rowDeleteBtn);
   document.body.appendChild(colDragHandle);
 
-  let activeWrapper: HTMLElement | null = null;
+  let activeContainer: HTMLElement | null = null;
   let activeTable: HTMLTableElement | null = null;
   let activeHeaderCell: HTMLTableCellElement | null = null;
   let activeRow: HTMLTableRowElement | null = null;
@@ -166,7 +173,7 @@ export function initTableHoverUI(editor: Editor) {
     headerMenu.classList.remove('visible');
     rowDeleteBtn.classList.remove('visible');
     colDragHandle.classList.remove('visible');
-    activeWrapper = null;
+    activeContainer = null;
     activeTable = null;
     activeHeaderCell = null;
     activeRow = null;
@@ -176,7 +183,7 @@ export function initTableHoverUI(editor: Editor) {
   function isOverTableOrControls(el: Element | null): boolean {
     if (!el) return false;
     if (ctrlElements.some((c) => c.contains(el))) return true;
-    return proseEl.contains(el) && !!findTableWrapper(el as Node);
+    return proseEl.contains(el) && !!findTableContainer(el as Node);
   }
 
   document.addEventListener('mousemove', (e: MouseEvent) => {
@@ -188,14 +195,13 @@ export function initTableHoverUI(editor: Editor) {
     }
     if (ctrlElements.some((c) => c.contains(elAt))) return;
 
-    const wrapper = findTableWrapper(e.target as Node);
-    const tableEl = wrapper?.querySelector('table') ?? null;
-    if (!wrapper || !tableEl) {
+    const found = findTableContainer(e.target as Node);
+    if (!found) {
       hideAll();
       return;
     }
-
-    const rect = wrapper.getBoundingClientRect();
+    const { container, table: tableEl } = found;
+    const rect = container.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
     const nearRight = relX >= rect.width - EDGE_ZONE;
@@ -207,7 +213,7 @@ export function initTableHoverUI(editor: Editor) {
     const bodyRow = row && !isHeaderRow(row) ? row : null;
 
     if (nearRight && tableEl) {
-      activeWrapper = wrapper;
+      activeContainer = container;
       activeTable = tableEl;
       addColBtn.classList.add('visible');
       addColBtn.style.left = `${rect.right - 32}px`;
@@ -220,7 +226,7 @@ export function initTableHoverUI(editor: Editor) {
     }
 
     if (nearBottom && tableEl) {
-      activeWrapper = wrapper;
+      activeContainer = container;
       activeTable = tableEl;
       addRowBtn.classList.add('visible');
       addRowBtn.style.left = `${rect.left + rect.width / 2 - 14}px`;
@@ -233,7 +239,7 @@ export function initTableHoverUI(editor: Editor) {
     }
 
     if (headerCell) {
-      activeWrapper = wrapper;
+      activeContainer = container;
       activeTable = tableEl;
       activeHeaderCell = headerCell;
       const hr = headerCell.getBoundingClientRect();
@@ -251,7 +257,7 @@ export function initTableHoverUI(editor: Editor) {
     }
 
     if (bodyRow) {
-      activeWrapper = wrapper;
+      activeContainer = container;
       activeTable = tableEl;
       activeRow = bodyRow;
       const rowRect = bodyRow.getBoundingClientRect();
