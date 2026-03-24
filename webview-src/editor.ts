@@ -45,7 +45,7 @@ export function createEditor(
       HeadingWithIds.configure({ levels: [1, 2, 3] }),
 
       // Tables
-      Table.configure({ resizable: false }),
+      Table.configure({ resizable: false, renderWrapper: true }),
       TableRow,
       TableHeader,
       TableCell,
